@@ -190,9 +190,11 @@ verified):
 ```sh
 pip install -e companion
 cd /path/to/your/project
-ovo-companion install                       # merges hooks + status line into .claude/settings.local.json
-ovo-companion run --device mochi.local      # or the device's IP; keep it running
+ovo-companion install --device mochi.local  # or the device's IP; merges hooks + status line
+                                            # into .claude/settings.local.json (--scope user: every project)
 ```
+
+The companion then starts by itself with your next Claude Code session.
 
 `ovo-companion uninstall` removes exactly what `install` added and restores
 your previous status line. Full guide: [companion/README.md](companion/README.md).
@@ -292,9 +294,10 @@ cd ../../companion && pip install -e ".[dev]" && python -m pytest
 
 Line coverage is measured for the touch module (and reported in CI for the
 Claude headers). The rest of the firmware is verified by compiling, by the
-host tests above and on hardware. **The Claude Code mode has not yet been run
-on a physical device**; see the hardware checklist in
-[docs/CLAUDE_MONITOR.md](docs/CLAUDE_MONITOR.md#verification).
+host tests above and on hardware. The Claude Code mode's network behaviour,
+timer, staleness, frame rate and heap have been measured on the device with a
+real Claude Code session; the touch, sound and legibility checks are listed in
+[docs/CLAUDE_MONITOR.md](docs/CLAUDE_MONITOR.md#on-hardware).
 
 ## Evaluation
 
@@ -329,11 +332,18 @@ with `--warnings all`.
 Sizes are for LF line endings, as stored in the repository;
 `tools/embed_web.py` normalises a CRLF checkout before embedding.
 
-**Not yet measured on hardware.** Frame rate, free heap and the fetch task's
-stack headroom are reported live by the device (`/api/state` → `sys`, and the
-Status panel), but no recorded values are published here yet. The upper bound
-on frame rate is set by I2C: one 1 KB frame needs about 23 ms on the wire at
-400 kHz.
+**On hardware** (ESP32-C3, SSD1306, read from `/api/state` → `sys`):
+
+| Measure | Value |
+| ------- | ----- |
+| Claude face frame rate | 8.0 fps animating, 4.0 fps static (by design: 125 / 250 ms) |
+| Free heap at idle | about 155 KB |
+| Lowest free heap since boot | 98.9 KB |
+| Fetch task stack never used | 8,656 of 12,288 bytes |
+| `/api/state` response time (40 requests) | median 47 ms, worst 994 ms |
+
+The eyes' frame rate has not been recorded yet. Its upper bound is set by
+I2C: one 1 KB frame needs about 23 ms on the wire at 400 kHz.
 
 ## Design decisions
 
@@ -367,7 +377,7 @@ on frame rate is set by I2C: one 1 KB frame needs about 23 ms on the wire at
 ## Roadmap
 
 - [ ] Record frame rate, heap and stack headroom on hardware and publish them here
-- [ ] Run the Claude Code mode on hardware and work through its checklist
+- [ ] Finish the Claude Code hardware checklist: touch, sounds, legibility, interactive session
 - [ ] Show more than one Claude Code session on screen (today: one, plus a count)
 - [ ] Optional shared token for `/api/claude/status`
 - [ ] Over-the-air updates (the partition already has two app slots)

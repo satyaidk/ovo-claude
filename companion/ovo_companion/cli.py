@@ -26,8 +26,16 @@ from .config import DEFAULT_PORT, LISTEN_HOST
 def _cmd_run(args: argparse.Namespace) -> int:
     from .daemon import run_forever
 
-    logging.basicConfig(level=logging.DEBUG if args.verbose else logging.INFO,
-                        format="%(asctime)s %(levelname)s %(message)s", datefmt="%H:%M:%S")
+    fmt = "%(asctime)s %(levelname)s %(message)s"
+    level = logging.DEBUG if args.verbose else logging.INFO
+    if args.log_file:
+        # Started in the background (autostart.py): no console, so log to a small rotating file.
+        from logging.handlers import RotatingFileHandler
+        pathlib.Path(args.log_file).parent.mkdir(parents=True, exist_ok=True)
+        handler = RotatingFileHandler(args.log_file, maxBytes=256 * 1024, backupCount=1, encoding="utf-8")
+        logging.basicConfig(level=level, format=fmt, datefmt="%Y-%m-%d %H:%M:%S", handlers=[handler])
+    else:
+        logging.basicConfig(level=level, format=fmt, datefmt="%H:%M:%S")
     cfg = config_mod.load(pathlib.Path(args.config) if args.config else None, overrides={
         "device": args.device, "device_port": args.device_port, "listen_port": args.port,
         "heartbeat_s": args.heartbeat})
@@ -68,10 +76,19 @@ def _cmd_install(args: argparse.Namespace) -> int:
         return 2
     print(f"Claude Code version: {'.'.join(map(str, version)) if version else 'not detected'}")
     _print_report(rep, "installed into" if not args.dry_run else "would install into")
-    if not args.dry_run:
-        print("Start the companion with:  ovo-companion run --device <device host or IP>")
-        print("Claude Code picks up the hooks automatically; restart sessions that were already open "
-              "if the status line does not change.")
+    if args.dry_run:
+        return 0
+    if args.device or args.device_port:
+        try:
+            path = config_mod.save({"device": args.device, "device_port": args.device_port})
+        except ValueError as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            return 2
+        print(f"  device:    {config_mod.load(path).device} (saved in {path})")
+    else:
+        print(f"  device:    {config_mod.load().device} (change with: ovo-companion install --device <IP>)")
+    print("The companion now starts by itself: with the next Claude Code session, or after the next")
+    print("reply in a session that is already open. To run it in a terminal instead: ovo-companion run")
     return 0
 
 
@@ -131,6 +148,7 @@ def build_parser() -> argparse.ArgumentParser:
     r.add_argument("--heartbeat", type=float, help="seconds between status resends (default 5)")
     r.add_argument("--config", help="JSON config file (default: %s)" % config_mod.default_config_path())
     r.add_argument("-v", "--verbose", action="store_true")
+    r.add_argument("--log-file", help="log here instead of the console (used by auto-start)")
     r.set_defaults(func=_cmd_run)
 
     for name, helptext in (("install", "add hooks and status line to Claude Code settings"),
@@ -145,6 +163,8 @@ def build_parser() -> argparse.ArgumentParser:
             i.add_argument("--events", choices=("auto", "core", "all"), default="auto")
             i.add_argument("--port", type=int, default=DEFAULT_PORT)
             i.add_argument("--claude-version", help="skip detection, e.g. 2.1.296")
+            i.add_argument("--device", help="device host name or IP, saved for the auto-started companion")
+            i.add_argument("--device-port", type=int, help="device HTTP port (default 80)")
             i.set_defaults(func=_cmd_install)
         else:
             i.set_defaults(func=_cmd_uninstall)

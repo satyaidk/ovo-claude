@@ -5,6 +5,11 @@ short timeout. They must never slow Claude Code down or make it show errors,
 so every failure is swallowed: if the daemon is not running, the forwarder
 exits 0 silently and the status line still prints.
 
+Both also start the daemon when it is not running (autostart.py). SessionStart
+is the hook that runs this forwarder, so a new session brings the companion
+up; the status line runs after every assistant message, which covers sessions
+that were already open.
+
 The status line has a second job: the user may already have one. The
 installer records it, and :func:`statusline_main` runs it with the same input
 and prints its output, so installing OVO never takes a status line away.
@@ -18,8 +23,9 @@ import subprocess
 import sys
 import urllib.error
 import urllib.request
-from typing import BinaryIO, Optional, Sequence, TextIO
+from typing import BinaryIO, Callable, Optional, Sequence, TextIO
 
+from . import autostart
 from .config import LISTEN_HOST
 from .statusline import parse_statusline, render_line, short_model_name
 
@@ -48,15 +54,21 @@ def _emit(out: Optional[TextIO], text: str) -> None:
     sys.stdout.flush()
 
 
-def hook_main(port: int, stdin: Optional[BinaryIO] = None, timeout_s: float = 1.0) -> int:
-    """Command-hook transport: forward one hook payload. Always exits 0, prints nothing."""
+def hook_main(port: int, stdin: Optional[BinaryIO] = None, timeout_s: float = 1.0,
+              ensure: Callable[..., bool] = autostart.ensure_running) -> int:
+    """Command-hook transport: forward one hook payload. Always exits 0, prints nothing.
+
+    If the daemon is down, start it, wait up to 3 s, and deliver the event
+    once more. The hook runs asynchronously, so Claude Code does not wait.
+    """
     stream = stdin or sys.stdin.buffer
     try:
         body = stream.read(MAX_STDIN + 1)
     except OSError:
         return 0
     if body and len(body) <= MAX_STDIN:
-        _post(port, "/ovo/v1/hook", body, timeout_s)
+        if _post(port, "/ovo/v1/hook", body, timeout_s) is None and ensure(port, wait_s=3.0):
+            _post(port, "/ovo/v1/hook", body, timeout_s)
     return 0
 
 
@@ -88,13 +100,16 @@ def _chained(manifest_path: Optional[str]) -> Optional[str]:
 
 
 def statusline_main(port: int, manifest_path: Optional[str] = None, stdin: Optional[BinaryIO] = None,
-                    stdout: Optional[TextIO] = None, timeout_s: float = 0.3) -> int:
+                    stdout: Optional[TextIO] = None, timeout_s: float = 0.3,
+                    ensure: Callable[..., bool] = autostart.ensure_running) -> int:
     stream = stdin or sys.stdin.buffer
     try:
         body = stream.read(MAX_STDIN + 1)
     except OSError:
         body = b""
     reply = _post(port, "/ovo/v1/statusline", body, timeout_s) if body and len(body) <= MAX_STDIN else None
+    if reply is None:
+        ensure(port, wait_s=0.0)          # start it for next time; the status line never waits
     try:
         link = json.loads(reply.decode("utf-8")).get("link", "unknown") if reply else "down"
     except (ValueError, AttributeError, UnicodeDecodeError):

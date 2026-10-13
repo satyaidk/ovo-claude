@@ -19,9 +19,12 @@ to 127.0.0.1 without a CORS preflight. Claude Code sends neither.
 """
 from __future__ import annotations
 
+import errno
 import json
 import logging
+import os
 import secrets
+import socket
 import sys
 import threading
 import time
@@ -44,8 +47,23 @@ _BROWSER_TYPES = ("text/plain", "application/x-www-form-urlencoded", "multipart/
 
 
 class _QuietServer(ThreadingHTTPServer):
-    """Claude Code closes idle keep-alive connections abruptly; that is normal."""
+    """One daemon per port, and quiet about clients that hang up.
 
+    On Windows, SO_REUSEADDR (Python's default for HTTP servers) lets a second
+    process bind a port that is already listening, and requests are then split
+    between the two. Auto-start can launch two daemons at once, so on Windows
+    the port is bound with SO_EXCLUSIVEADDRUSE instead: the second one fails
+    to start and exits. On other systems SO_REUSEADDR never allows that.
+    """
+
+    allow_reuse_address = os.name != "nt"
+
+    def server_bind(self):
+        if os.name == "nt" and hasattr(socket, "SO_EXCLUSIVEADDRUSE"):
+            self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_EXCLUSIVEADDRUSE, 1)
+        super().server_bind()
+
+    # Claude Code closes idle keep-alive connections abruptly; that is normal.
     def handle_error(self, request, client_address):
         exc = sys.exc_info()[1]
         if isinstance(exc, (ConnectionResetError, ConnectionAbortedError, BrokenPipeError)):
@@ -257,9 +275,21 @@ def _make_handler(companion: Companion):
     return Handler
 
 
+def port_in_use(exc: OSError) -> bool:
+    # Windows reports an exclusively bound port as WSAEADDRINUSE or WSAEACCES.
+    return exc.errno == errno.EADDRINUSE or getattr(exc, "winerror", None) in (10048, 10013)
+
+
 def run_forever(config: Config) -> int:
     companion = Companion(config)
-    companion.start()
+    try:
+        companion.start()
+    except OSError as exc:
+        if port_in_use(exc):
+            # Normal with auto-start: another session already started one.
+            log.info("a companion is already running on port %d; exiting", config.listen_port)
+            return 0
+        raise
     try:
         while True:
             time.sleep(3600)

@@ -269,11 +269,16 @@ the web page or `POST /api/settings`: `cc_perm`, `cc_done`, `cc_fail`,
 Full instructions: [companion/README.md](../companion/README.md). In short:
 
 ```sh
-pip install -e companion                 # or run companion/ovo-companion.py directly
-ovo-companion install                    # in your project: .claude/settings.local.json
-ovo-companion run --device mochi.local   # keep running while you use Claude Code
-ovo-companion uninstall                  # removes exactly what install added
+pip install -e companion                         # or run companion/ovo-companion.py directly
+ovo-companion install --device 192.168.1.62      # in your project: .claude/settings.local.json
+ovo-companion uninstall                          # removes exactly what install added
 ```
+
+The companion starts by itself (`autostart.py`): the `SessionStart` hook
+launches it in the background if it is not running, and so does the status
+line, which covers sessions that were already open. One copy runs at a time,
+because the port is bound exclusively. `ovo-companion run` still works for
+running it in a terminal.
 
 `install --scope user` writes to `~/.claude/settings.json` instead, which
 monitors every project. Network requirement: the computer must reach the
@@ -300,7 +305,7 @@ The config file is `%APPDATA%\ovo-companion\config.json` on Windows and
 
 | Symptom | Check |
 | ------- | ----- |
-| OLED says "Waiting for the companion" | Is `ovo-companion run` running? Does `ovo-companion send-test --device <ip>` reach it? Use the IP shown on that screen if `mochi.local` does not resolve |
+| OLED says "Waiting for the companion", or STALE with an old "Last:" activity | Nothing is reporting. Are the hooks installed where the session runs (`ovo-companion install`, or `--scope user` for every project)? Is the companion up (`ovo-companion status`)? It starts with the next session or reply; its log is `companion.log` next to the config file. Does `ovo-companion send-test --device <ip>` reach the board? Use the IP shown on the Waiting screen if `mochi.local` does not resolve |
 | `send-test` says "the firmware has no /api/claude/status" | Flash the firmware from this version |
 | OLED shows STALE | The companion stopped, the PC slept, or Wi-Fi dropped. It recovers on the next message |
 | Status never changes from Ready | Hooks not installed in the project you are using (`.claude/settings.local.json`), or Claude Code was started before installing: start a new session |
@@ -352,17 +357,43 @@ The real run found a problem the documentation reading had missed:
 `SessionStart` does not accept HTTP hooks. The installer now uses an async
 command hook for that one event.
 
-**Not tested on hardware.** No ESP32-C3, OLED, touch pad or buzzer was
-available for this work. Rendering, the HTTP endpoint and the buzzer
-patterns are verified by compiling, by host tests and by the PC renderer
-only. Before relying on the feature, check on the device:
+### On hardware
 
-1. The three-face cycle with a real 5-second hold, and taps on each face.
+Measured on 2026-10-13 on an ESP32-C3 with an SSD1306 at 0x3C on GPIO 20/21,
+from a PC on the same Wi-Fi, by reading `/api/state`:
+
+| Check | Result |
+| ----- | ------ |
+| Endpoint: valid, repeated and older `seq` | 200 `ok claude`, `ok repeated`, `ok outdated, ignored` |
+| Endpoint: malformed JSON, `effort: "ultra"`, 33-char activity, `seq` as a string | 400, each naming the field |
+| Endpoint: form content type, 2 KB body, `GET` | 415, 413, 404; the device kept running |
+| Real Claude Code 2.1.296 session (`claude -p`, companion on the PC) | Ready, Running "Thinking..." (MANUAL), "Running command" with effort `medium`, "Thinking...", then Task done and Ended; 0 messages rejected |
+| Interactive Claude Code session, hooks installed with `--scope user` | The companion started by itself from the status line; the board followed the session live ("Thinking...", "Editing code", "Running command") with model "Opus 5.5" from the status line, effort XHIGH and approval mode AUTO; 25 events, 0 invalid |
+| Companion killed without a goodbye | STALE about 15 s after the last heartbeat; timer frozen; device still responsive |
+| Companion goodbye (`connected: false`) | DISCONNECTED immediately |
+| Local timer | ticked 109 s to 114 s with no messages in between |
+| Frame rate on the Claude face | 8.0 fps while animating (125 ms), 4.0 fps on static screens (250 ms), as designed |
+| Free heap | about 155 KB at idle; lowest since boot 98.9 KB; fetch task stack 8,656 bytes unused |
+| `/api/state` response time, 40 requests | 40 succeeded; median 47 ms, 90th percentile 107 ms, worst 994 ms |
+
+Free heap dips by about 280 bytes per HTTP request and comes back within two
+minutes (151.5 KB after rapid polling, 155.3 KB after 150 s idle): that is
+lwIP keeping closed connections in TIME_WAIT, not a leak. In a headless run,
+`SessionEnd` follows `Stop` within a fraction of a second, so Task done is on
+screen only briefly; in an interactive session it stays until the next prompt.
+
+Still to be checked by eye and ear on the device:
+
+1. The three-face cycle with a real 5-second hold (a 15-second hold moves one
+   face), and taps on each face.
 2. `ovo-companion send-test --state approval`: two beeps, blinking header.
-3. A full Claude Code session: running, approval, done screens and the timer.
-4. Pull the plug on the companion: STALE after 15 s, timer frozen.
-5. `curl` a malformed body and a 2 KB body: HTTP 400 and 413, device unaffected.
-6. Frame rate on the Claude face (`/api/state` -> `sys.fps`) and free heap.
+3. The completion tone and the failure warning.
+4. Legibility of every screen on the physical panel.
+
+Polling `/api/state` every 0.4 s while Claude Code works lowers the Claude
+face to 4-5 fps and can delay a status message past the companion's 2 s
+timeout (it is retried). The web server handles one request at a time inside
+the main loop. Without that extra polling the face runs at 8.1 fps.
 
 ## Limitations
 

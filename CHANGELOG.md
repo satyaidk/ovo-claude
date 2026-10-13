@@ -20,6 +20,10 @@ All notable changes to this project are documented here. The format follows
   every 5 seconds. Includes `install` and `uninstall` commands that merge into
   Claude Code settings with a backup, run idempotently, and keep and chain an
   existing status line. 154 tests.
+- The companion starts by itself: the `SessionStart` hook and the status line
+  launch it in the background when it is not running (`autostart.py`), and
+  `install --device` saves the device address for it. Only one copy runs: the
+  port is bound exclusively, which on Windows needs `SO_EXCLUSIVEADDRUSE`.
 - `POST /api/claude/status`: validated JSON (1 KB, read into a fixed buffer),
   ordered by sequence number, with stale-link detection on the device.
 - Buzzer alerts for permission requests, completion, failure and (optionally)
