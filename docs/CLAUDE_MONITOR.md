@@ -352,17 +352,38 @@ The real run found a problem the documentation reading had missed:
 `SessionStart` does not accept HTTP hooks. The installer now uses an async
 command hook for that one event.
 
-**Not tested on hardware.** No ESP32-C3, OLED, touch pad or buzzer was
-available for this work. Rendering, the HTTP endpoint and the buzzer
-patterns are verified by compiling, by host tests and by the PC renderer
-only. Before relying on the feature, check on the device:
+### On hardware
 
-1. The three-face cycle with a real 5-second hold, and taps on each face.
+Measured on 2026-10-13 on an ESP32-C3 with an SSD1306 at 0x3C on GPIO 20/21,
+from a PC on the same Wi-Fi, by reading `/api/state`:
+
+| Check | Result |
+| ----- | ------ |
+| Endpoint: valid, repeated and older `seq` | 200 `ok claude`, `ok repeated`, `ok outdated, ignored` |
+| Endpoint: malformed JSON, `effort: "ultra"`, 33-char activity, `seq` as a string | 400, each naming the field |
+| Endpoint: form content type, 2 KB body, `GET` | 415, 413, 404; the device kept running |
+| Real Claude Code 2.1.296 session (`claude -p`, companion on the PC) | Ready, Running "Thinking..." (MANUAL), "Running command" with effort `medium`, "Thinking...", then Task done and Ended; 0 messages rejected |
+| Companion killed without a goodbye | STALE about 15 s after the last heartbeat; timer frozen; device still responsive |
+| Companion goodbye (`connected: false`) | DISCONNECTED immediately |
+| Local timer | ticked 109 s to 114 s with no messages in between |
+| Frame rate on the Claude face | 8.0 fps while animating (125 ms), 4.0 fps on static screens (250 ms), as designed |
+| Free heap | about 155 KB at idle; lowest since boot 98.9 KB; fetch task stack 8,656 bytes unused |
+| `/api/state` response time, 40 requests | 40 succeeded; median 47 ms, 90th percentile 107 ms, worst 994 ms |
+
+Free heap dips by about 280 bytes per HTTP request and comes back within two
+minutes (151.5 KB after rapid polling, 155.3 KB after 150 s idle): that is
+lwIP keeping closed connections in TIME_WAIT, not a leak. In a headless run,
+`SessionEnd` follows `Stop` within a fraction of a second, so Task done is on
+screen only briefly; in an interactive session it stays until the next prompt.
+
+Still to be checked by eye and ear on the device:
+
+1. The three-face cycle with a real 5-second hold (a 15-second hold moves one
+   face), and taps on each face.
 2. `ovo-companion send-test --state approval`: two beeps, blinking header.
-3. A full Claude Code session: running, approval, done screens and the timer.
-4. Pull the plug on the companion: STALE after 15 s, timer frozen.
-5. `curl` a malformed body and a 2 KB body: HTTP 400 and 413, device unaffected.
-6. Frame rate on the Claude face (`/api/state` -> `sys.fps`) and free heap.
+3. The completion tone and the failure warning.
+4. Legibility of every screen on the physical panel.
+5. An interactive session, where the status line supplies the model name.
 
 ## Limitations
 
