@@ -266,7 +266,9 @@ the web page or `POST /api/settings`: `cc_perm`, `cc_done`, `cc_fail`,
 
 ## Install, run, remove
 
-Full instructions: [companion/README.md](../companion/README.md). In short:
+Step by step, with checks after each step:
+[CONNECT_CLAUDE_CODE.md](CONNECT_CLAUDE_CODE.md). Reference:
+[companion/README.md](../companion/README.md). In short:
 
 ```sh
 pip install -e companion                         # or run companion/ovo-companion.py directly

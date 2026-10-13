@@ -5,7 +5,9 @@ the OVO desk device (the MochiEyes firmware's Claude Code face). It uses
 Claude Code's supported integration points, hooks and the status line, and
 never scrapes the terminal. Standard library only, Python 3.9+.
 
-How it works, what each screen means and how it was tested:
+**New here? Follow the step-by-step guide:
+[docs/CONNECT_CLAUDE_CODE.md](../docs/CONNECT_CLAUDE_CODE.md).** This page is
+the reference. How it works, what each screen means and how it was tested:
 [docs/CLAUDE_MONITOR.md](../docs/CLAUDE_MONITOR.md).
 
 ## Requirements

@@ -184,8 +184,9 @@ address. If Wi-Fi fails, the device opens a hotspot named **Kitty**
 
 ### Claude Code monitor (optional)
 
-On the computer where you run Claude Code (Python 3.9+, Claude Code 2.1.296
-verified):
+**Step-by-step guide: [docs/CONNECT_CLAUDE_CODE.md](docs/CONNECT_CLAUDE_CODE.md).**
+In short, on the computer where you run Claude Code (Python 3.9+, Claude Code
+2.1.296 verified):
 
 ```sh
 pip install -e companion
@@ -367,6 +368,8 @@ I2C: one 1 KB frame needs about 23 ms on the wire at 400 kHz.
 - [Claude Code monitor](docs/CLAUDE_MONITOR.md): data flow, hooks and status
   line, screens, alerts, install and removal, troubleshooting, privacy,
   verification and limitations
+- [Connect Claude Code](docs/CONNECT_CLAUDE_CODE.md): step-by-step setup from
+  a flashed device to a live OLED, with checks and fixes for each step
 - [Companion](companion/README.md): install, run, configure, remove
 - [Web API](docs/API.md): endpoints, commands, state format, frame format,
   Claude status schema
