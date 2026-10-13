@@ -1,0 +1,23 @@
+# Private credentials (template: firmware/MochiEyes/secrets.example.h)
+secrets.h
+
+# Host builds, rendered frames, preview output
+build/
+*.o
+*.gcda
+*.gcno
+*.gcov
+
+# Editors and OS
+.vscode/
+.idea/
+*.swp
+.DS_Store
+Thumbs.db
+__pycache__/
+.pytest_cache/
+*.egg-info/
+
+# Claude Code: personal settings (the OVO installer writes here) and its backups
+.claude/settings.local.json
+*.ovo-backup-*

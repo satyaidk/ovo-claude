@@ -1,0 +1,117 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  firmware:
+    name: Firmware (ESP32-C3)
+    runs-on: ubuntu-latest
+    env:
+      ESP32_INDEX: https://espressif.github.io/arduino-esp32/package_esp32_index.json
+      # Same board options as the README: USB CDC on boot, 1.9 MB app partition.
+      FQBN: esp32:esp32:esp32c3:CDCOnBoot=cdc,PartitionScheme=min_spiffs
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.arduino15
+            ~/Arduino/libraries
+          key: arduino-esp32-3.3.12-libs-v1
+
+      - uses: arduino/setup-arduino-cli@v2
+
+      - name: Install ESP32 core and libraries (pinned to the versions the docs measured)
+        run: |
+          arduino-cli core update-index --additional-urls "$ESP32_INDEX"
+          arduino-cli core install esp32:esp32@3.3.12 --additional-urls "$ESP32_INDEX"
+          arduino-cli lib install "Adafruit SSD1306@2.5.17" "Adafruit GFX Library@1.12.6" "ArduinoJson@7.4.3"
+
+      # secrets.h is git-ignored, so this also proves the firmware builds from
+      # secrets.example.h alone.
+      - name: Compile
+        run: |
+          arduino-cli compile --fqbn "$FQBN" --warnings all firmware/MochiEyes 2>&1 | tee build.log
+          grep -E "Sketch uses|Global variables" build.log >> "$GITHUB_STEP_SUMMARY"
+
+  host-tests:
+    name: Host tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Same versions the firmware job installs; the Claude tests parse JSON with
+      # ArduinoJson and the screen renderer draws with the real Adafruit GFX.
+      - name: Fetch ArduinoJson 7.4.3 and Adafruit GFX 1.12.6 sources
+        run: |
+          git clone --quiet --depth 1 --branch v7.4.3 https://github.com/bblanchon/ArduinoJson.git build/ArduinoJson
+          git clone --quiet --depth 1 --branch 1.12.6 https://github.com/adafruit/Adafruit-GFX-Library.git build/Adafruit-GFX
+
+      - name: Touch gesture tests (with coverage)
+        working-directory: tests/host
+        run: |
+          g++ -std=c++11 -O0 -Wall -Wextra -Werror --coverage -I../../firmware/MochiEyes test_touch.cpp -o touch_tests
+          ./touch_tests
+          gcov touch_tests-test_touch.gcda | grep -A1 "TouchGestures.h'" | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: Claude mode tests (modes, protocol, monitor, layouts; with coverage)
+        working-directory: tests/host
+        run: |
+          g++ -std=c++11 -O0 -Wall -Wextra -Werror --coverage -I../../firmware/MochiEyes \
+              -isystem ../../build/ArduinoJson/src test_claude.cpp -o claude_tests
+          ./claude_tests
+          gcov claude_tests-test_claude.gcda | grep -A1 -E "(AppModes|ClaudeStatus|ClaudeMonitor|ClaudeView).h'" | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: Claude screens render and fit the panel (real Adafruit GFX)
+        run: |
+          mkdir -p build
+          F=firmware/MochiEyes
+          g++ -std=c++17 -O2 -DARDUINO=100 -DARDUINOJSON_ENABLE_ARDUINO_STRING=0 -DARDUINOJSON_ENABLE_ARDUINO_STREAM=0 \
+              -DARDUINOJSON_ENABLE_ARDUINO_PRINT=0 -DARDUINOJSON_ENABLE_PROGMEM=0 \
+              -Itools/preview/arduino_shim -Ibuild/Adafruit-GFX -Ibuild/ArduinoJson/src -I$F \
+              tools/preview/claude_screens.cpp build/Adafruit-GFX/Adafruit_GFX.cpp -o build/claude_screens
+          ./build/claude_screens build/claude
+
+      - name: Eye engine builds and renders on a PC
+        run: |
+          mkdir -p build
+          F=firmware/MochiEyes
+          g++ -std=c++17 -O2 -Wall -Wextra -I$F tools/preview/frames.cpp $F/src/eye/EyeEngine.cpp $F/src/eye/EyeRenderer.cpp -o build/frames
+          ./build/frames build/frames.bin 20 5
+          test "$(stat -c %s build/frames.bin)" -eq $((100 * 1024))
+
+  companion:
+    name: Companion (Python ${{ matrix.python }})
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python: ["3.9", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - name: Install (standard library only, plus pytest)
+        working-directory: companion
+        run: pip install -e ".[dev]"
+      - name: Tests
+        working-directory: companion
+        run: python -m pytest -q
+
+  web:
+    name: Web page embedded
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Embedded WebUi.h matches web/index.html
+        run: python tools/embed_web.py --check

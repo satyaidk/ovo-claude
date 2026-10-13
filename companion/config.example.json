@@ -1,0 +1,10 @@
+{
+  "device": "mochi.local",
+  "device_port": 80,
+  "listen_port": 47823,
+  "heartbeat_s": 5,
+  "timeout_s": 2,
+  "retry_max_s": 30,
+  "session_expiry_s": 7200,
+  "ended_linger_s": 60
+}
