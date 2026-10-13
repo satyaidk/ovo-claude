@@ -31,6 +31,12 @@ def clock():
     return FakeClock()
 
 
+@pytest.fixture(autouse=True)
+def no_autostart(monkeypatch):
+    """Tests never launch real background daemons unless they opt in."""
+    monkeypatch.setenv("OVO_NO_AUTOSTART", "1")
+
+
 # ---- simulated hook payloads (shapes from code.claude.com/docs/en/hooks) ----
 
 def hook(event: str, session: str = "sess-aaaa-1111", **extra) -> dict:

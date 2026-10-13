@@ -190,9 +190,11 @@ verified):
 ```sh
 pip install -e companion
 cd /path/to/your/project
-ovo-companion install                       # merges hooks + status line into .claude/settings.local.json
-ovo-companion run --device mochi.local      # or the device's IP; keep it running
+ovo-companion install --device mochi.local  # or the device's IP; merges hooks + status line
+                                            # into .claude/settings.local.json (--scope user: every project)
 ```
+
+The companion then starts by itself with your next Claude Code session.
 
 `ovo-companion uninstall` removes exactly what `install` added and restores
 your previous status line. Full guide: [companion/README.md](companion/README.md).

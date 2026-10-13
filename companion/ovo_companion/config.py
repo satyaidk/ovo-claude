@@ -99,5 +99,30 @@ def load(path: Optional[pathlib.Path] = None, env: Optional[Mapping[str, str]] =
     return cfg.validate()
 
 
+def save(updates: Mapping[str, Any], path: Optional[pathlib.Path] = None) -> pathlib.Path:
+    """Merges ``updates`` into the config file (other keys are kept).
+
+    Used by ``install --device`` so a daemon started in the background by a
+    hook knows where the device is. The result is validated before writing.
+    """
+    file = path or default_config_path()
+    data: dict = {}
+    if file.exists():
+        data = json.loads(file.read_text(encoding="utf-8") or "{}")
+        if not isinstance(data, dict):
+            raise ValueError(f"{file}: expected a JSON object")
+    data.update({k: v for k, v in updates.items() if v is not None})
+    cfg = Config()
+    known = {f.name for f in fields(Config)}
+    for k, v in data.items():
+        if k not in known:
+            raise ValueError(f"{file}: unknown key {k!r}")
+        setattr(cfg, k, _coerce(k, v))
+    cfg.validate()
+    file.parent.mkdir(parents=True, exist_ok=True)
+    file.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+    return file
+
+
 def as_dict(cfg: Config) -> dict:
     return asdict(cfg)

@@ -269,11 +269,16 @@ the web page or `POST /api/settings`: `cc_perm`, `cc_done`, `cc_fail`,
 Full instructions: [companion/README.md](../companion/README.md). In short:
 
 ```sh
-pip install -e companion                 # or run companion/ovo-companion.py directly
-ovo-companion install                    # in your project: .claude/settings.local.json
-ovo-companion run --device mochi.local   # keep running while you use Claude Code
-ovo-companion uninstall                  # removes exactly what install added
+pip install -e companion                         # or run companion/ovo-companion.py directly
+ovo-companion install --device 192.168.1.62      # in your project: .claude/settings.local.json
+ovo-companion uninstall                          # removes exactly what install added
 ```
+
+The companion starts by itself (`autostart.py`): the `SessionStart` hook
+launches it in the background if it is not running, and so does the status
+line, which covers sessions that were already open. One copy runs at a time,
+because the port is bound exclusively. `ovo-companion run` still works for
+running it in a terminal.
 
 `install --scope user` writes to `~/.claude/settings.json` instead, which
 monitors every project. Network requirement: the computer must reach the
@@ -300,7 +305,7 @@ The config file is `%APPDATA%\ovo-companion\config.json` on Windows and
 
 | Symptom | Check |
 | ------- | ----- |
-| OLED says "Waiting for the companion" | Is `ovo-companion run` running? Does `ovo-companion send-test --device <ip>` reach it? Use the IP shown on that screen if `mochi.local` does not resolve |
+| OLED says "Waiting for the companion", or STALE with an old "Last:" activity | Nothing is reporting. Are the hooks installed where the session runs (`ovo-companion install`, or `--scope user` for every project)? Is the companion up (`ovo-companion status`)? It starts with the next session or reply; its log is `companion.log` next to the config file. Does `ovo-companion send-test --device <ip>` reach the board? Use the IP shown on the Waiting screen if `mochi.local` does not resolve |
 | `send-test` says "the firmware has no /api/claude/status" | Flash the firmware from this version |
 | OLED shows STALE | The companion stopped, the PC slept, or Wi-Fi dropped. It recovers on the next message |
 | Status never changes from Ready | Hooks not installed in the project you are using (`.claude/settings.local.json`), or Claude Code was started before installing: start a new session |
@@ -363,6 +368,7 @@ from a PC on the same Wi-Fi, by reading `/api/state`:
 | Endpoint: malformed JSON, `effort: "ultra"`, 33-char activity, `seq` as a string | 400, each naming the field |
 | Endpoint: form content type, 2 KB body, `GET` | 415, 413, 404; the device kept running |
 | Real Claude Code 2.1.296 session (`claude -p`, companion on the PC) | Ready, Running "Thinking..." (MANUAL), "Running command" with effort `medium`, "Thinking...", then Task done and Ended; 0 messages rejected |
+| Interactive Claude Code session, hooks installed with `--scope user` | The companion started by itself from the status line; the board followed the session live ("Thinking...", "Editing code", "Running command") with model "Opus 5.5" from the status line, effort XHIGH and approval mode AUTO; 25 events, 0 invalid |
 | Companion killed without a goodbye | STALE about 15 s after the last heartbeat; timer frozen; device still responsive |
 | Companion goodbye (`connected: false`) | DISCONNECTED immediately |
 | Local timer | ticked 109 s to 114 s with no messages in between |
@@ -383,7 +389,11 @@ Still to be checked by eye and ear on the device:
 2. `ovo-companion send-test --state approval`: two beeps, blinking header.
 3. The completion tone and the failure warning.
 4. Legibility of every screen on the physical panel.
-5. An interactive session, where the status line supplies the model name.
+
+Polling `/api/state` every 0.4 s while Claude Code works lowers the Claude
+face to 4-5 fps and can delay a status message past the companion's 2 s
+timeout (it is retried). The web server handles one request at a time inside
+the main loop. Without that extra polling the face runs at 8.1 fps.
 
 ## Limitations
 

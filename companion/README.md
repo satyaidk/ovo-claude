@@ -44,9 +44,12 @@ In the project you work on:
 
 ```sh
 cd /path/to/your/project
-ovo-companion install --dry-run   # shows what would change
-ovo-companion install
+ovo-companion install --dry-run                    # shows what would change
+ovo-companion install --device 192.168.1.62        # your device's IP or host name
 ```
+
+`--device` is saved in the companion's config file, so the companion can start
+by itself (see [Run](#run)).
 
 This merges into `.claude/settings.local.json`, the per-project file Claude
 Code keeps out of git:
@@ -73,13 +76,22 @@ status line does not appear.
 
 ## Run
 
+Nothing to do: after `install`, the companion **starts by itself**. The
+`SessionStart` hook starts it when a session opens, and the status line starts
+it after the next reply in a session that was already open. It runs in the
+background without a window, logs to `companion.log` next to the config file,
+and keeps running after Claude Code closes. Only one copy ever runs: the port
+is bound exclusively, and a second copy exits at once.
+
+To run it in a terminal instead, for example to watch its log:
+
 ```sh
-ovo-companion run --device 192.168.1.42        # or --device mochi.local
+ovo-companion run --device 192.168.1.42 -v     # or --device mochi.local
 ```
 
-Keep it running while you use Claude Code (a terminal tab, or a login task).
-It listens on 127.0.0.1:47823 and sends the device an update whenever the
-state changes and every 5 seconds. Stop it with Ctrl+C: the device shows
+Set `OVO_NO_AUTOSTART=1` to turn automatic starting off. The companion listens
+on 127.0.0.1:47823 and sends the device an update whenever the state changes
+and every 5 seconds. Stopped with Ctrl+C, it tells the device, which shows
 DISCONNECTED straight away.
 
 ```sh
@@ -151,4 +163,5 @@ directories. They never touch your real `~/.claude`.
 | `daemon.py` | local receiver and sender thread |
 | `forward.py` | the programs Claude Code runs (hook forwarder, status line) |
 | `installer.py` | merge into and remove from Claude Code settings |
+| `autostart.py` | start the daemon in the background when a hook finds it missing |
 | `cli.py`, `config.py` | command line and configuration |
