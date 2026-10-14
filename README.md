@@ -2,7 +2,7 @@
 
 <img src="docs/images/logo.svg" alt="MochiEyes logo" width="112">
 
-# MochiEyes
+# OvO with Claude code
 
 **A desk companion for the ESP32-C3: lifelike eyes that react to touch, a clock, weather and prices terminal, and a Claude Code activity monitor, on one 128×64 OLED.**
 
