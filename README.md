@@ -14,7 +14,7 @@
 [![Coverage](https://img.shields.io/badge/coverage%20(touch%20module)-100%25-2f6f4f)](docs/adr/0005-arduino-free-touch-gesture-recognizer.md)
 [![License: MIT](https://img.shields.io/badge/license-MIT-4a5a6f)](LICENSE)
 
-[Getting started](#getting-started) · [Usage](#usage) · [Architecture](#architecture) · [Claude Code monitor](docs/CLAUDE_MONITOR.md) · [Design](docs/DESIGN.md) · [API](docs/API.md) · [Learning path](docs/LEARNING_PATH.md)
+[**User manual**](#user-manual-step-by-step) · [Getting started](#getting-started) · [Usage](#usage) · [Architecture](#architecture) · [Claude Code monitor](docs/CLAUDE_MONITOR.md) · [Design](docs/DESIGN.md) · [API](docs/API.md) · [Learning path](docs/LEARNING_PATH.md)
 
 <img src="docs/images/eyes.gif" alt="The Mochi eyes on the OLED: glancing toward the touch pad, smiling, then a grumpy glare" width="384">
 
@@ -89,6 +89,226 @@ with the real Adafruit GFX library on a PC (`tools/preview/claude_screens.cpp`),
 3× scale:
 
 <p align="center"><img src="docs/images/claude-screens.png" alt="The nine Claude Code screens: running, approval needed, task done, turn done, failed, ready, stale, offline, waiting for the companion" width="720"></p>
+
+## User manual: step by step
+
+New to OvO? Follow these steps in order. Each step says what to do and what
+you should see before you move on. If a step doesn't look like the picture,
+fix it before going to the next one: later steps depend on it.
+
+| Part | Steps | Time |
+| ---- | ----- | ---- |
+| [A. Build the device](#a-build-the-device) | 1 to 5 | about 30 min |
+| [B. Use the device](#b-use-the-device) | 6 to 7 | 5 min |
+| [C. Connect Claude Code](#c-connect-claude-code-optional) (optional) | 8 to 12 | about 10 min |
+
+### A. Build the device
+
+#### Step 1. Get the parts and software
+
+| You need | Notes |
+| -------- | ----- |
+| ESP32-C3 SuperMini | Any ESP32-C3 board with 4 MB flash works |
+| SSD1306 0.96" OLED, 128×64, I2C | 4 pins: GND, VCC, SCL, SDA |
+| TTP223 touch module | Any capacitive touch module whose output goes HIGH when touched |
+| Passive buzzer | Not an active buzzer: an active one only clicks |
+| USB-C data cable, jumper wires | Some cables only charge: use one that carries data |
+| A 2.4 GHz Wi-Fi network | The ESP32-C3 cannot join 5 GHz networks |
+| [Arduino IDE 2.x](https://www.arduino.cc/en/software) | On Windows, macOS or Linux |
+
+#### Step 2. Wire the parts
+
+Connect the parts with the board **unplugged**:
+
+<p align="center"><img src="docs/images/manual/01-wiring.png" alt="Wiring diagram: OLED SDA to GPIO20, SCL to GPIO21, touch OUT to GPIO1, buzzer + to GPIO2; all VCC to 3V3 and all GND to GND" width="760"></p>
+
+| From | To ESP32-C3 |
+| ---- | ----------- |
+| OLED SDA | GPIO 20 |
+| OLED SCL | GPIO 21 |
+| Touch OUT | GPIO 1 |
+| Buzzer + | GPIO 2 |
+| OLED VCC, touch VCC | 3V3 |
+| OLED GND, touch GND, buzzer − | GND |
+
+Put the touch pad on the **left** of the screen as you face it. If the board
+doesn't start with the buzzer connected, read the GPIO2 note in
+[docs/HARDWARE.md](docs/HARDWARE.md#pin-notes).
+
+#### Step 3. Set up the Arduino IDE
+
+1. Open **File → Preferences**. Under **Additional boards manager URLs**, paste
+   `https://espressif.github.io/arduino-esp32/package_esp32_index.json`.
+2. Open **Tools → Board → Boards Manager**, search for `esp32`, and install
+   **esp32 by Espressif Systems**, version **3.3.12**.
+3. Open **Tools → Manage Libraries** and install:
+   **Adafruit SSD1306** (2.5.17), **Adafruit GFX Library** (1.12.6) and
+   **ArduinoJson** (7.4.3). If the IDE asks to install dependencies too, say yes.
+
+#### Step 4. Download the code and add your Wi-Fi
+
+1. Download this repository: **Code → Download ZIP** on GitHub and unzip it,
+   or run `git clone https://github.com/satyaidk/ovo-claude.git`.
+2. In `firmware/MochiEyes/`, make a copy of `secrets.example.h` and name it
+   **`secrets.h`**.
+3. Open `secrets.h` and put in your Wi-Fi name and password:
+
+<p align="center"><img src="docs/images/manual/03-secrets.png" alt="secrets.h with WIFI_SSID_DEFAULT and WIFI_PASS_DEFAULT filled in" width="680"></p>
+
+`secrets.h` is git-ignored, so your password never ends up on GitHub.
+Optional: at the top of `MochiEyes.ino` you can set your time zone
+(`TZ_STRING`), your name for the greeting (`OWNER_NAME`), and `TOUCH_SIDE`
+(`+1` if the pad is on the right).
+
+#### Step 5. Upload to the board
+
+1. In the Arduino IDE, open **`firmware/MochiEyes/MochiEyes.ino`**.
+2. Plug the board in with the USB cable.
+3. In the **Tools** menu, set these values. The three yellow rows are
+   required:
+
+<p align="center"><img src="docs/images/manual/02-arduino-settings.png" alt="Arduino IDE Tools menu: Board ESP32C3 Dev Module, USB CDC On Boot Enabled, Partition Scheme Minimal SPIFFS" width="680"></p>
+
+4. Click **Upload** (the → arrow) and wait for **Done uploading**.
+
+**You should hear** three beeps and **see** the eyes open. For 8 seconds the
+bottom of the screen shows the device's IP address. Write it down: you'll
+need it later.
+
+<p align="center"><img src="docs/images/manual/04-boot.png" alt="The eyes on the OLED after boot, with the meaning of the three boot beeps" width="620"></p>
+
+| If | Do this |
+| -- | ------- |
+| The upload fails with "Sketch too big" | Set **Partition Scheme** to **Minimal SPIFFS** (step 5.3) |
+| The screen stays dark | Check the SDA/SCL wires. A long low beep means the OLED wasn't found |
+| There's no high beep (Wi-Fi) | Check `secrets.h`. The device then opens its own hotspot, **Kitty** (password `12345678`): join it and open `http://192.168.4.1` |
+| No port shows up in **Tools → Port** | Try another USB cable or port. Hold **BOOT** while you plug the board in |
+
+### B. Use the device
+
+#### Step 6. Touch it
+
+| Gesture | What Mochi does |
+| ------- | --------------- |
+| Tap once | Glances toward the pad |
+| Tap twice | Smiles |
+| Tap three times | Grumpy side-eye |
+| Tap four or more times | Gets dizzy |
+| Hold | Enjoys being petted |
+| **Hold 5 seconds** | **Moves to the next face** |
+
+A progress bar shows while you hold. The device has three faces, and a 5-second
+hold moves to the next one:
+
+<p align="center"><img src="docs/images/manual/05-face-cycle.png" alt="Hold 5 seconds to go from the eyes to the clock pages, and again to the Claude Code face" width="760"></p>
+
+On the clock face, a tap shows the next page (weather, prices, your note).
+After 2 minutes without a touch Mochi gets drowsy, and after 5 it falls
+asleep. Any tap wakes it up.
+
+#### Step 7. Open the controller in a browser
+
+On a phone or computer **on the same Wi-Fi**, open **`http://mochi.local`**.
+If that doesn't load, use the IP address from step 5 instead.
+
+<p align="center"><img src="docs/images/controller-dark.png" alt="The web controller: live OLED mirror, Eyes / Clock / Claude switch, mood and face buttons" width="720"></p>
+
+From this page you can:
+
+- **drag inside the circle** to choose where Mochi looks;
+- pick a **mood** (calm, curious, sleepy...) or a **face** (happy, angry...);
+- switch faces with **Eyes / Clock / Claude** under the live screen copy;
+- write a **note** that shows on the clock pages;
+- change **settings**: sound, auto-sleep, the Wi-Fi network, and the face
+  shown after a restart. Settings are saved on the device.
+
+The page also works on a phone, and has a light theme.
+
+### C. Connect Claude Code (optional)
+
+With this part, the OLED shows what [Claude Code](https://code.claude.com) is
+doing on your computer, and beeps when it needs your permission. You need
+Claude Code and **Python 3.9 or newer** on the computer, on the same Wi-Fi as
+the device. Type each command in a terminal **opened in the repository
+folder** (the one that contains `companion/`).
+
+#### Step 8. Show the Claude face
+
+Hold the pad for 5 seconds twice (eyes → clock → Claude), or press
+**Claude** on the web page. You should see *"Waiting for the companion on
+your PC"* and the device's IP address.
+
+#### Step 9. Test the screen and the buzzer
+
+Replace `192.168.1.62` with your device's address (or `mochi.local`):
+
+```sh
+python companion/ovo-companion.py send-test --device 192.168.1.62 --state approval --activity "Run: npm"
+```
+
+**You should see** `ok: ... replied 'ok claude'` in the terminal, and
+**APPROVAL NEEDED** on the device with **two short beeps**:
+
+<p align="center"><img src="docs/images/manual/06-send-test.png" alt="The send-test command prints ok, and the OLED shows APPROVAL NEEDED" width="760"></p>
+
+The screen changes to STALE after 15 seconds. That's expected: a test sends
+just one message. If the command fails, see the table in
+[step 3 of the full guide](docs/CONNECT_CLAUDE_CODE.md#step-3-test-the-screen-and-the-buzzer-without-claude-code).
+
+#### Step 10. Connect Claude Code to the device
+
+```sh
+python companion/ovo-companion.py install --scope user --device 192.168.1.62
+```
+
+<p align="center"><img src="docs/images/manual/07-install.png" alt="Output of the install command: hooks added, backup made, device saved" width="760"></p>
+
+This adds hooks and a status line to Claude Code's settings, keeps a backup
+of the old file, and saves the device address. It does **not** change your
+permissions, and the device can never approve or deny anything for you.
+`--scope user` covers every project. Running it again is safe, for example
+when the device's address changes.
+
+#### Step 11. Start Claude Code
+
+Open a **new** terminal and run `claude`. Give it a small task, for example
+*"list the files in this folder and tell me which is the largest"*. At the
+bottom of Claude Code you'll see the OVO status line:
+
+<p align="center"><img src="docs/images/manual/08-statusline.png" alt="Claude Code with the status line OVO filled dot, Opus 5.5, xhigh" width="680"></p>
+
+| Dot | Meaning |
+| --- | ------- |
+| `●` filled | Working: the device is receiving updates |
+| `○` hollow | The device isn't answering: check its address and Wi-Fi |
+| `◌` dotted | The companion is starting: it starts by itself after the next reply |
+
+You don't need to start the companion yourself: Claude Code starts it in the
+background.
+
+#### Step 12. Watch the device follow Claude Code
+
+<p align="center"><img src="docs/images/manual/09-oled-states.png" alt="Four OLED screens: READY, running tests, APPROVAL NEEDED, TASK DONE" width="860"></p>
+
+1. **READY**: Claude Code is open and waiting for your prompt.
+2. **Working**: model and effort, the current activity (Reading files,
+   Editing code, Running tests...), a timer and the approval mode.
+3. **APPROVAL NEEDED** with two beeps: Claude Code wants permission.
+   Answer **in Claude Code** on your computer.
+4. **TASK DONE** with a tone: the task is finished.
+
+On the Claude face, tap once for a details page, and tap again to go back.
+Check the connection at any time with
+`python companion/ovo-companion.py status`.
+
+**To remove it:** `python companion/ovo-companion.py uninstall --scope user`
+removes exactly what step 10 added and restores your old status line.
+
+**More help:** [Connect Claude Code](docs/CONNECT_CLAUDE_CODE.md) has the full
+guide with troubleshooting, and [Hardware](docs/HARDWARE.md) covers wiring
+and boot sounds in detail. The pictures in this manual are generated by
+`tools/preview/manual_images.py`; the OLED screens in them come from the
+firmware's own drawing code.
 
 ## Architecture
 
